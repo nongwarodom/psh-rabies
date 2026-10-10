@@ -60,14 +60,14 @@ fig = px.bar(area, x="หมู่บ้าน", y="pct_bitten_people", color="t
 fig.update_layout(height=380, margin=dict(t=10, b=10))
 st.plotly_chart(fig, width="stretch")
 
-st.subheader("🚨 รายชื่อครัวเรือนที่มีผู้ถูกกัด/ข่วน แต่ยังไม่ได้ฉีดวัคซีน (ควรติดตาม)")
-st.caption("🔒 เบอร์โทรถูกปิดบังบางส่วนเพื่อคุ้มครองข้อมูลส่วนบุคคล (เว็บไซต์สาธารณะ) — เจ้าหน้าที่ดูเบอร์เต็มได้ใน Google Sheet ต้นฉบับ")
-follow = df[df["has_bitten"]].sort_values(["tambon", "moo"])
-cols = ["tambon", "moo", "house_no", "residents", "people_bitten_unvax", "people_vaccinated",
-        "dogs_total", "dogs_vaccinated", "phone_masked", "timestamp"]
-if follow.empty:
-    st.success("ไม่พบครัวเรือนที่มีผู้ถูกกัดแต่ยังไม่ได้ฉีดวัคซีน")
+st.subheader("🚨 หมู่บ้านที่มีผู้ถูกกัด/ข่วน แต่ยังไม่ได้ฉีดวัคซีน (ควรติดตาม)")
+st.caption("🔒 แสดงเฉพาะยอดรวมระดับตำบล/หมู่บ้าน เพื่อคุ้มครองข้อมูลส่วนบุคคล — เจ้าหน้าที่ดูรายครัวเรือนได้ใน Google Sheet ต้นฉบับ")
+vil = ui.by_area(df, keys=("tambon", "moo"))
+vil = vil[vil["people_bitten_unvax"] > 0].sort_values("people_bitten_unvax", ascending=False)
+cols = ["tambon", "moo", "households", "hh_bitten", "people_bitten_unvax", "residents", "pct_bitten_people"]
+if vil.empty:
+    st.success("ไม่พบผู้ถูกกัดที่ยังไม่ได้ฉีดวัคซีน")
 else:
-    st.dataframe(ui.to_thai(follow[cols]), width="stretch", hide_index=True)
-    st.download_button("⬇️ ดาวน์โหลดรายชื่อติดตาม (CSV)", ui.csv_bytes(ui.to_thai(follow[cols])),
-                       "bitten_followup.csv", "text/csv")
+    out = ui.to_thai(vil[cols].round(1))
+    st.dataframe(out, width="stretch", hide_index=True)
+    st.download_button("⬇️ ดาวน์โหลด (CSV)", ui.csv_bytes(out), "bitten_by_village.csv", "text/csv")

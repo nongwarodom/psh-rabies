@@ -53,9 +53,4 @@ else:
     st.plotly_chart(fig, width="stretch")
     st.caption("สีของกล่อง = % ความครอบคลุมวัคซีนสุนัข (แดง = ต่ำ, เขียว = สูง)")
 
-st.divider()
-st.subheader("🔍 ข้อมูลรายครัวเรือน (หลังทำความสะอาด)")
-hh_cols = ["timestamp", "tambon", "moo", "house_no", "residents", "people_bitten_unvax", "people_vaccinated",
-           "dogs_total", "dogs_vaccinated", "cats_total", "cats_vaccinated", "other_mammals", "phone_masked"]
-st.dataframe(ui.to_thai(df[hh_cols].sort_values("timestamp", ascending=False)),
-             width="stretch", hide_index=True)
+st.caption("🔒 เว็บไซต์สาธารณะแสดงเฉพาะยอดรวมระดับตำบล/หมู่บ้าน ไม่แสดงบ้านเลขที่หรือข้อมูลรายครัวเรือน")

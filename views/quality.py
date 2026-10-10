@@ -7,26 +7,15 @@ st.title("🧹 คุณภาพข้อมูลและการทำค�
 st.caption(f"แหล่งข้อมูล: {st.session_state.get('source_note', '')}")
 
 stats = st.session_state["stats"]
-log = st.session_state["df_log"]
+log = st.session_state["df_log"].copy()
 excluded = st.session_state["df_excluded"]
-clean = st.session_state["df_all"]
-raw = st.session_state["df_raw"]
+df = ui.filtered()
 
-
-def _mask(v) -> str:
-    d = "".join(ch for ch in str(v) if ch.isdigit())
-    return f"{d[:3]}-xxx-{d[-3:]}" if len(d) >= 6 else ("xxx" if d else "")
-
-
-# 🔒 public site: never expose full phone numbers
-raw = raw.copy()
-for col in [c for c in raw.columns if "เบอร์" in c or "phone" in c.lower()]:
-    raw[col] = raw[col].map(_mask)
-clean = clean.drop(columns=["phone"], errors="ignore")
-log = log.copy()
-is_phone = log["คอลัมน์"] == "เบอร์โทร"
-log.loc[is_phone, "ค่าเดิม"] = log.loc[is_phone, "ค่าเดิม"].map(_mask)
-log.loc[is_phone, "ค่าใหม่"] = log.loc[is_phone, "ค่าใหม่"].map(_mask)
+# 🔒 public site: hide every personal field (house number, phone) in the change log
+PRIVATE = {"บ้านเลขที่", "เบอร์โทร"}
+is_private = log["คอลัมน์"].isin(PRIVATE)
+log.loc[is_private, ["ค่าเดิม", "ค่าใหม่"]] = "🔒 ซ่อน"
+log.loc[log["คอลัมน์"] == "ทั้งแถว", "ค่าเดิม"] = ""
 
 c = st.columns(4)
 ui.kpi(c[0], "📥 แถวข้อมูลดิบ", stats["raw_rows"], "จาก Google Sheets", ui.COLORS["people"])
@@ -40,8 +29,8 @@ with st.expander("📖 กฎการทำความสะอาดข้อ
 2. **ค่าว่าง/ไม่มี** — `-`, `--`, `_`, `ไม่มี`, ช่องว่าง → 0
 3. **ตำบล** — ตัดคำว่า "ต./ตำบล" และจับคู่ชื่อที่สะกดใกล้เคียงกับ 18 ตำบลของอำเภอปราสาท
 4. **หมู่ที่** — ดึงเฉพาะตัวเลข (เช่น `หมู่ 9`, `ม.9` → 9)
-5. **บ้านเลขที่** — ดึงเฉพาะเลขที่บ้าน ตัดที่อยู่ส่วนเกิน (เช่น `55ม.3ต.กังแอน...` → 55)
-6. **เบอร์โทร** — เก็บเฉพาะตัวเลข เติม 0 นำหน้าถ้าหาย, แปลง +66 → 0
+5. **บ้านเลขที่** — ดึงเฉพาะเลขที่บ้าน ตัดที่อยู่ส่วนเกิน (ใช้ภายในเพื่อตรวจข้อมูลซ้ำเท่านั้น ไม่แสดงบนเว็บ)
+6. **เบอร์โทร** — เก็บเฉพาะตัวเลข เติม 0 นำหน้าถ้าหาย, แปลง +66 → 0 (ไม่แสดงบนเว็บ)
 7. **ความสอดคล้อง** — สัตว์ที่ฉีดวัคซีนต้องไม่เกินจำนวนทั้งหมด; ผู้ถูกกัด + ผู้ฉีดวัคซีน ต้องไม่เกินผู้อาศัย
 8. **ข้อมูลทดสอบ** — แถวที่มีคำว่า "ทดสอบ/test" ถูกตัดออก
 9. **ข้อมูลซ้ำ** — บ้านเดียวกัน (ตำบล + หมู่ + บ้านเลขที่) เก็บเฉพาะรายการที่ส่งล่าสุด
@@ -52,7 +41,7 @@ st.subheader("🗑️ แถวที่ถูกตัดออก")
 if excluded.empty:
     st.success("ไม่มีแถวที่ถูกตัดออก")
 else:
-    show = excluded[["row_id", "exclude_reason", "timestamp", "tambon", "moo", "house_no", "residents"]]
+    show = excluded[["row_id", "exclude_reason", "tambon", "moo"]]
     st.dataframe(ui.to_thai(show).rename(columns={"row_id": "แถวต้นฉบับ", "exclude_reason": "เหตุผล"}),
                  width="stretch", hide_index=True)
 
@@ -71,13 +60,11 @@ else:
     st.dataframe(view.astype(str), width="stretch", hide_index=True)
 
 st.divider()
-st.subheader("⬇️ ดาวน์โหลดข้อมูล")
+st.subheader("⬇️ ดาวน์โหลดข้อมูล (ยอดรวม)")
+st.caption("🔒 ดาวน์โหลดได้เฉพาะยอดรวมระดับตำบล/หมู่บ้าน — ข้อมูลรายครัวเรือนดูได้ใน Google Sheet ต้นฉบับ (เฉพาะเจ้าหน้าที่)")
 c1, c2, c3 = st.columns(3)
-c1.download_button("ข้อมูลที่ทำความสะอาดแล้ว (CSV)", ui.csv_bytes(clean.drop(columns=["house_key"], errors="ignore")),
-                   "clean_survey.csv", "text/csv", width="stretch")
-c2.download_button("บันทึกการแก้ไข (CSV)", ui.csv_bytes(log), "cleaning_log.csv", "text/csv",
-                   width="stretch")
-c3.download_button("ข้อมูลดิบ (CSV)", ui.csv_bytes(raw), "raw_survey.csv", "text/csv", width="stretch")
-
-with st.expander("ดูข้อมูลดิบ"):
-    st.dataframe(raw, width="stretch", hide_index=True)
+c1.download_button("สรุปรายตำบล (CSV)", ui.csv_bytes(ui.to_thai(ui.by_area(df, all_tambons=True).round(1))),
+                   "summary_tambon.csv", "text/csv", width="stretch")
+c2.download_button("สรุปรายหมู่บ้าน (CSV)", ui.csv_bytes(ui.to_thai(ui.by_area(df, keys=("tambon", "moo")).round(1))),
+                   "summary_village.csv", "text/csv", width="stretch")
+c3.download_button("บันทึกการแก้ไข (CSV)", ui.csv_bytes(log), "cleaning_log.csv", "text/csv", width="stretch")

@@ -93,12 +93,15 @@ with r:
     fig.update_layout(height=340, margin=dict(t=10, b=10), legend_title="")
     st.plotly_chart(fig, width="stretch")
 
-st.subheader(f"📋 ครัวเรือนที่มี{animal}ยังไม่ได้รับวัคซีน (เป้าหมายการรณรงค์ฉีดวัคซีน)")
-target = df[df[unv] > 0].sort_values(unv, ascending=False)
+st.subheader(f"📋 หมู่บ้านที่มี{animal}ยังไม่ได้รับวัคซีน (เป้าหมายการรณรงค์ฉีดวัคซีน)")
+st.caption("🔒 แสดงเฉพาะยอดรวมระดับตำบล/หมู่บ้าน")
+target = ui.by_area(df, keys=("tambon", "moo"))
+target = target[target[unv] > 0].sort_values(unv, ascending=False)
 if target.empty:
-    st.success(f"ไม่พบครัวเรือนที่มี{animal}ยังไม่ได้รับวัคซีน")
+    st.success(f"ไม่พบ{animal}ที่ยังไม่ได้รับวัคซีน")
 else:
-    cols = ["tambon", "moo", "house_no", tot, vax, unv, "phone_masked"]
-    st.dataframe(ui.to_thai(target[cols]), width="stretch", hide_index=True)
-    st.download_button("⬇️ ดาวน์โหลด (CSV)", ui.csv_bytes(ui.to_thai(target[cols])),
-                       f"{key}_unvaccinated.csv", "text/csv")
+    hh_col = "hh_dog" if key == "dogs" else "hh_cat"
+    cols = ["tambon", "moo", "households", hh_col, tot, vax, unv, pct_col]
+    out = ui.to_thai(target[cols].round(1))
+    st.dataframe(out, width="stretch", hide_index=True)
+    st.download_button("⬇️ ดาวน์โหลด (CSV)", ui.csv_bytes(out), f"{key}_unvaccinated_by_village.csv", "text/csv")
