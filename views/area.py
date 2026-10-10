@@ -11,7 +11,8 @@ if ui.empty_guard(df):
 level = st.radio("ระดับการสรุป", ["รายตำบล", "รายหมู่บ้าน"], horizontal=True)
 keys = ("tambon",) if level == "รายตำบล" else ("tambon", "moo")
 agg = ui.by_area(df, keys=keys)
-cols = list(keys) + ["households", "residents", "people_bitten_unvax", "pct_bitten_people", "hh_bitten",
+cols = list(keys) + (["pop_total", "pct_coverage"] if level == "รายตำบล" else []) + [
+                     "households", "residents", "people_bitten_unvax", "pct_bitten_people", "hh_bitten",
                      "people_vaccinated", "pct_vax_people", "dogs_total", "dogs_vaccinated",
                      "dogs_unvaccinated", "pct_dog_vax", "cats_total", "cats_vaccinated",
                      "cats_unvaccinated", "pct_cat_vax", "other_mammals"]

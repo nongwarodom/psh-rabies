@@ -14,13 +14,16 @@ if ui.empty_guard(df):
 
 T = df[ui.SUM_COLS].sum()
 hh = len(df)
+base_pop = ui.base_population(st.session_state.get("sel_tambons"))
 
-c = st.columns(5)
-ui.kpi(c[0], "🏠 ครัวเรือนที่สำรวจ", hh, f"{df['tambon'].nunique()} ตำบล · {df.groupby(['tambon','moo']).ngroups} หมู่บ้าน", ui.COLORS["house"])
-ui.kpi(c[1], "👥 ประชากร (คน)", T.residents, f"เฉลี่ย {T.residents/hh:.1f} คน/ครัวเรือน", ui.COLORS["people"])
-ui.kpi(c[2], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {df['has_dog'].sum():,} ครัวเรือน", ui.COLORS["dog"])
-ui.kpi(c[3], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {df['has_cat'].sum():,} ครัวเรือน", ui.COLORS["cat"])
-ui.kpi(c[4], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "", ui.COLORS["mammal"])
+c = st.columns(6)
+ui.kpi(c[0], "📋 ประชากรทะเบียนราษฎร์", base_pop, "ประชากรฐาน (ก.ย. 2569)", "#6c757d")
+ui.kpi(c[1], "🏠 ครัวเรือนที่สำรวจ", hh, f"{df['tambon'].nunique()} ตำบล · {df.groupby(['tambon','moo']).ngroups} หมู่บ้าน", ui.COLORS["house"])
+ui.kpi(c[2], "👥 ผู้อาศัยที่สำรวจ (คน)", T.residents,
+       f"ครอบคลุม {ui.pct(T.residents, base_pop):.2f}% ของประชากรฐาน", ui.COLORS["people"])
+ui.kpi(c[3], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {df['has_dog'].sum():,} ครัวเรือน", ui.COLORS["dog"])
+ui.kpi(c[4], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {df['has_cat'].sum():,} ครัวเรือน", ui.COLORS["cat"])
+ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "", ui.COLORS["mammal"])
 
 st.write("")
 c = st.columns(4)
@@ -61,16 +64,30 @@ with right:
     fig.update_layout(height=380, margin=dict(t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
-# ---- responses by tambon (all 18)
-st.subheader("🏘️ จำนวนครัวเรือนที่ตอบแบบสำรวจ รายตำบล (18 ตำบล)")
-agg = ui.by_area(df, all_tambons=True).sort_values("households", ascending=True)
+# ---- responses by tambon (all 18) + coverage vs registered population
+agg = ui.by_area(df, all_tambons=True).sort_values("pop_total", ascending=True)
 agg["สถานะ"] = agg["households"].map(lambda v: "มีข้อมูล" if v > 0 else "ยังไม่มีข้อมูล")
-fig = px.bar(agg, y="tambon", x="households", orientation="h", text="households", color="สถานะ",
-             color_discrete_map={"มีข้อมูล": ui.COLORS["vax"], "ยังไม่มีข้อมูล": "#ced4da"},
-             labels={"tambon": "ตำบล", "households": "ครัวเรือน"},
-             hover_data={"residents": True, "dogs_total": True, "cats_total": True})
-fig.update_layout(height=560, margin=dict(t=10, b=10), legend_title="")
-st.plotly_chart(fig, width="stretch")
+left, right = st.columns(2)
+with left:
+    st.subheader("🏘️ ครัวเรือนที่ตอบแบบสำรวจ รายตำบล")
+    fig = px.bar(agg, y="tambon", x="households", orientation="h", text="households", color="สถานะ",
+                 color_discrete_map={"มีข้อมูล": ui.COLORS["vax"], "ยังไม่มีข้อมูล": "#ced4da"},
+                 labels={"tambon": "ตำบล", "households": "ครัวเรือน"},
+                 hover_data={"residents": True, "dogs_total": True, "cats_total": True})
+    fig.update_layout(height=600, margin=dict(t=10, b=10), legend=dict(title="", orientation="h", y=-0.08))
+    st.plotly_chart(fig, width="stretch")
+with right:
+    st.subheader("📋 ความครอบคลุมเทียบประชากรทะเบียนราษฎร์")
+    fig = px.bar(agg, y="tambon", x="pct_coverage", orientation="h",
+                 text=agg.apply(lambda r: f"{r.residents:,.0f} / {r.pop_total:,.0f} ({r.pct_coverage:.2f}%)", axis=1),
+                 color_discrete_sequence=[ui.COLORS["people"]],
+                 labels={"tambon": "ตำบล", "pct_coverage": "% ผู้อาศัยที่สำรวจ ÷ ประชากรทะเบียน"},
+                 hover_data={"pop_total": ":,", "residents": True})
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    fig.update_layout(height=600, margin=dict(t=10, b=10, r=140),
+                      xaxis_range=[0, max(1.0, agg["pct_coverage"].max() * 1.3)])
+    st.plotly_chart(fig, width="stretch")
+st.caption(f"ประชากรฐาน: {ui.POP_SOURCE} (รวมสัญชาติไทยและไม่ใช่สัญชาติไทย) · เรียงตำบลตามจำนวนประชากร")
 
 # ---- vaccine status summary
 st.subheader("💉 สรุปสถานะวัคซีน")

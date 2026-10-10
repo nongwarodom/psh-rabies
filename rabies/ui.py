@@ -9,6 +9,7 @@ import plotly.io as pio
 import streamlit as st
 
 from rabies.cleaning import CSV_URL, DATA_DIR, TAMBONS, clean, load_raw
+from rabies.population import POP_SOURCE, POPULATION, base_population  # noqa: F401
 
 GEOJSON_PATH = DATA_DIR / "prasat_tambon.geojson"
 BACKUP_RAW = DATA_DIR / "raw_backup.csv"
@@ -91,8 +92,17 @@ def load_geojson():
         g = f["geometry"]
         rings = [g["coordinates"][0]] if g["type"] == "Polygon" else [p[0] for p in g["coordinates"]]
         ring = max(rings, key=len)
-        xs, ys = zip(*ring)
-        cent[f["properties"]["tambon"]] = (sum(ys) / len(ys), sum(xs) / len(xs))
+        a = cx = cy = 0.0
+        for (x0, y0), (x1, y1) in zip(ring, ring[1:] + ring[:1]):
+            cr = x0 * y1 - x1 * y0
+            a += cr
+            cx += (x0 + x1) * cr
+            cy += (y0 + y1) * cr
+        if abs(a) < 1e-12:
+            xs, ys = zip(*ring)
+            cent[f["properties"]["tambon"]] = (sum(ys) / len(ys), sum(xs) / len(xs))
+        else:
+            cent[f["properties"]["tambon"]] = (cy / (3 * a), cx / (3 * a))
     return gj, cent
 
 
@@ -142,6 +152,9 @@ def by_area(df: pd.DataFrame, keys=("tambon",), all_tambons=False) -> pd.DataFra
     agg["pct_hh_bitten"] = agg.apply(lambda r: pct(r.hh_bitten, r.households), axis=1)
     agg["pct_dog_vax"] = agg.apply(lambda r: pct(r.dogs_vaccinated, r.dogs_total), axis=1)
     agg["pct_cat_vax"] = agg.apply(lambda r: pct(r.cats_vaccinated, r.cats_total), axis=1)
+    if keys == ["tambon"]:
+        agg = agg.merge(POPULATION, on="tambon", how="left")
+        agg["pct_coverage"] = agg.apply(lambda r: pct(r.residents, r.pop_total), axis=1)
     return agg
 
 
@@ -158,6 +171,8 @@ TH_COLS = {
     "pct_hh_bitten": "% ครัวเรือนที่มีผู้ถูกกัด", "pct_dog_vax": "% สุนัขฉีดวัคซีน",
     "pct_cat_vax": "% แมวฉีดวัคซีน", "timestamp": "วันเวลาที่ตอบ", "phone": "เบอร์โทร",
     "phone_masked": "เบอร์โทร",
+    "pop_male": "ประชากรชาย (ทะเบียน)", "pop_female": "ประชากรหญิง (ทะเบียน)",
+    "pop_total": "ประชากรทะเบียนราษฎร์ (คน)", "pct_coverage": "% ความครอบคลุมการสำรวจ",
 }
 
 
