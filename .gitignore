@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 🔒 Survey data contains personal info (phone numbers / addresses) — never commit
+data/raw_backup.csv
+data/clean_survey.csv
+data/cleaning_log.csv
+data/th_subdistricts.geojson
+*.csv
+
+# Streamlit secrets
+.streamlit/secrets.toml
