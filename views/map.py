@@ -12,7 +12,9 @@ gj, centroids = ui.load_geojson()
 agg = ui.by_area(df, all_tambons=True)
 
 METRICS = {
-    "pct_coverage": ("% ความครอบคลุมการสำรวจ (ผู้อาศัยที่สำรวจ ÷ ประชากรทะเบียน)", "Blues"),
+    "pct_hh_coverage": ("% ความครอบคลุมครัวเรือน (ครัวเรือนที่สำรวจ ÷ บ้านทะเบียน)", "Blues"),
+    "pct_coverage": ("% ความครอบคลุมประชากร (ผู้อาศัยที่สำรวจ ÷ ประชากรทะเบียน)", "Blues"),
+    "houses_total": ("บ้านทะเบียนราษฎร์ (หลัง)", "Blues"),
     "pop_total": ("ประชากรทะเบียนราษฎร์ (คน)", "Blues"),
     "households": ("จำนวนครัวเรือนที่ตอบแบบสำรวจ", "Blues"),
     "residents": ("จำนวนผู้อาศัยที่สำรวจ (คน)", "Blues"),
@@ -35,10 +37,11 @@ metric = c1.selectbox("ตัวชี้วัด", list(METRICS), format_func=
 show_value = c2.toggle("แสดงค่าบนแผนที่", value=True)
 label, scale = METRICS[metric]
 is_pct = metric.startswith("pct_")
-fmt = (lambda v: f"{v:.1f}%") if is_pct else (lambda v: f"{v:,.0f}")
+is_cov = metric in ("pct_coverage", "pct_hh_coverage")
+fmt = (lambda v: f"{v:.2f}%") if is_cov else (lambda v: f"{v:.1f}%") if is_pct else (lambda v: f"{v:,.0f}")
 
 if is_pct:
-    vmax = 100 if metric != "pct_coverage" else max(5.0, float(agg[metric].max()) * 1.1)
+    vmax = max(1.0, float(agg[metric].max()) * 1.1) if is_cov else 100
     rng = (0, vmax)
 else:
     rng = (0, max(1.0, float(agg[metric].max())))
@@ -46,8 +49,9 @@ else:
 fig = px.choropleth(
     agg, geojson=gj, locations="tambon", featureidkey="properties.tambon", color=metric,
     color_continuous_scale=scale, range_color=rng, hover_name="tambon",
-    hover_data={"tambon": False, "pop_total": ":,", "households": True, "residents": True,
-                "pct_coverage": ":.2f", "people_bitten_unvax": True, "people_vaccinated": True,
+    hover_data={"tambon": False, "houses_total": ":,", "households": True, "pct_hh_coverage": ":.2f",
+                "pop_total": ":,", "residents": True, "pct_coverage": ":.2f",
+                "people_bitten_unvax": True, "people_vaccinated": True,
                 "dogs_total": True, "dogs_vaccinated": True, "cats_total": True, "cats_vaccinated": True},
     labels={**ui.TH_COLS, metric: label},
 )
@@ -73,8 +77,9 @@ if no_data:
     st.warning(f"ตำบลที่ยังไม่มีข้อมูลการสำรวจ ({len(no_data)}): " + ", ".join(no_data))
 
 st.subheader("📋 ตารางข้อมูลรายตำบล")
-show = agg[["tambon", "pop_total", "households", "residents", "pct_coverage", "people_bitten_unvax",
-            "pct_bitten_people", "people_vaccinated", "dogs_total", "dogs_vaccinated", "pct_dog_vax",
-            "cats_total", "cats_vaccinated", "pct_cat_vax", "other_mammals"]].sort_values(metric, ascending=False)
+show = agg.sort_values(metric, ascending=False)[[
+    "tambon", "houses_total", "households", "pct_hh_coverage", "pop_total", "residents", "pct_coverage",
+    "people_bitten_unvax", "pct_bitten_people", "people_vaccinated", "dogs_total", "dogs_vaccinated",
+    "pct_dog_vax", "cats_total", "cats_vaccinated", "pct_cat_vax", "other_mammals"]]
 st.dataframe(ui.to_thai(show).round(2), width="stretch", hide_index=True)
 st.caption(f"ประชากรฐาน: {ui.POP_SOURCE} · ขอบเขตตำบล: OpenGISData-Thailand (chingchai) — ใช้เพื่อการแสดงผลเท่านั้น")

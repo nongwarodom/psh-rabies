@@ -11,7 +11,7 @@ if ui.empty_guard(df):
 level = st.radio("ระดับการสรุป", ["รายตำบล", "รายหมู่บ้าน"], horizontal=True)
 keys = ("tambon",) if level == "รายตำบล" else ("tambon", "moo")
 agg = ui.by_area(df, keys=keys)
-cols = list(keys) + (["pop_total", "pct_coverage"] if level == "รายตำบล" else []) + [
+cols = list(keys) + (["houses_total", "pct_hh_coverage", "pop_total", "pct_coverage"] if level == "รายตำบล" else []) + [
                      "households", "residents", "people_bitten_unvax", "pct_bitten_people", "hh_bitten",
                      "people_vaccinated", "pct_vax_people", "dogs_total", "dogs_vaccinated",
                      "dogs_unvaccinated", "pct_dog_vax", "cats_total", "cats_vaccinated",
@@ -25,7 +25,8 @@ total["pct_dog_vax"] = ui.pct(T.dogs_vaccinated, T.dogs_total)
 total["pct_cat_vax"] = ui.pct(T.cats_vaccinated, T.cats_total)
 
 pct_cols = [c for c in cols if c.startswith("pct_")]
-cfg = {ui.TH_COLS[c]: st.column_config.ProgressColumn(ui.TH_COLS[c], format="%.1f%%", min_value=0, max_value=100)
+cfg = {ui.TH_COLS[c]: st.column_config.ProgressColumn(
+           ui.TH_COLS[c], format="%.2f%%" if "coverage" in c else "%.1f%%", min_value=0, max_value=100)
        for c in pct_cols}
 st.dataframe(ui.to_thai(table), width="stretch", hide_index=True, column_config=cfg)
 

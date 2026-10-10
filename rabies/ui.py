@@ -9,7 +9,7 @@ import plotly.io as pio
 import streamlit as st
 
 from rabies.cleaning import CSV_URL, DATA_DIR, TAMBONS, clean, load_raw
-from rabies.population import POP_SOURCE, POPULATION, base_population  # noqa: F401
+from rabies.population import POP_SOURCE, POPULATION, base_houses, base_population  # noqa: F401
 
 GEOJSON_PATH = DATA_DIR / "prasat_tambon.geojson"
 BACKUP_RAW = DATA_DIR / "raw_backup.csv"
@@ -155,11 +155,12 @@ def by_area(df: pd.DataFrame, keys=("tambon",), all_tambons=False) -> pd.DataFra
     if keys == ["tambon"]:
         agg = agg.merge(POPULATION, on="tambon", how="left")
         agg["pct_coverage"] = agg.apply(lambda r: pct(r.residents, r.pop_total), axis=1)
+        agg["pct_hh_coverage"] = agg.apply(lambda r: pct(r.households, r.houses_total), axis=1)
     return agg
 
 
 TH_COLS = {
-    "tambon": "ตำบล", "moo": "หมู่ที่", "house_no": "บ้านเลขที่", "households": "ครัวเรือน",
+    "tambon": "ตำบล", "moo": "หมู่ที่", "house_no": "บ้านเลขที่", "households": "ครัวเรือนที่สำรวจ",
     "residents": "ผู้อาศัย (คน)", "people_bitten_unvax": "ถูกกัด/ข่วน ยังไม่ฉีดวัคซีน (คน)",
     "people_vaccinated": "เคยฉีดวัคซีนแล้ว (คน)", "people_other": "ไม่เคยถูกกัด/ไม่เคยฉีด (คน)",
     "dogs_total": "สุนัข (ตัว)", "dogs_vaccinated": "สุนัขฉีดวัคซีน (ตัว)",
@@ -172,7 +173,9 @@ TH_COLS = {
     "pct_cat_vax": "% แมวฉีดวัคซีน", "timestamp": "วันเวลาที่ตอบ", "phone": "เบอร์โทร",
     "phone_masked": "เบอร์โทร",
     "pop_male": "ประชากรชาย (ทะเบียน)", "pop_female": "ประชากรหญิง (ทะเบียน)",
-    "pop_total": "ประชากรทะเบียนราษฎร์ (คน)", "pct_coverage": "% ความครอบคลุมการสำรวจ",
+    "pop_total": "ประชากรทะเบียนราษฎร์ (คน)", "pct_coverage": "% ความครอบคลุมประชากร",
+    "houses_total": "บ้านทะเบียนราษฎร์ (หลัง)", "pct_hh_coverage": "% ความครอบคลุมครัวเรือน",
+    "persons_per_house": "คนต่อบ้าน (ทะเบียน)",
 }
 
 

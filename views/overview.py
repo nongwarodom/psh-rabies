@@ -15,12 +15,14 @@ if ui.empty_guard(df):
 T = df[ui.SUM_COLS].sum()
 hh = len(df)
 base_pop = ui.base_population(st.session_state.get("sel_tambons"))
+base_hh = ui.base_houses(st.session_state.get("sel_tambons"))
 
 c = st.columns(6)
-ui.kpi(c[0], "📋 ประชากรทะเบียนราษฎร์", base_pop, "ประชากรฐาน (ก.ย. 2569)", "#6c757d")
-ui.kpi(c[1], "🏠 ครัวเรือนที่สำรวจ", hh, f"{df['tambon'].nunique()} ตำบล · {df.groupby(['tambon','moo']).ngroups} หมู่บ้าน", ui.COLORS["house"])
+ui.kpi(c[0], "📋 ฐานทะเบียนราษฎร์", f"{base_hh:,} หลัง", f"ประชากร {base_pop:,} คน (ก.ย. 2569)", "#6c757d")
+ui.kpi(c[1], "🏠 ครัวเรือนที่สำรวจ", hh,
+       f"ครอบคลุม {ui.pct(hh, base_hh):.2f}% ของบ้าน · {df.groupby(['tambon','moo']).ngroups} หมู่บ้าน", ui.COLORS["house"])
 ui.kpi(c[2], "👥 ผู้อาศัยที่สำรวจ (คน)", T.residents,
-       f"ครอบคลุม {ui.pct(T.residents, base_pop):.2f}% ของประชากรฐาน", ui.COLORS["people"])
+       f"ครอบคลุม {ui.pct(T.residents, base_pop):.2f}% ของประชากร", ui.COLORS["people"])
 ui.kpi(c[3], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {df['has_dog'].sum():,} ครัวเรือน", ui.COLORS["dog"])
 ui.kpi(c[4], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {df['has_cat'].sum():,} ครัวเรือน", ui.COLORS["cat"])
 ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "", ui.COLORS["mammal"])
@@ -77,15 +79,20 @@ with left:
     fig.update_layout(height=600, margin=dict(t=10, b=10), legend=dict(title="", orientation="h", y=-0.08))
     st.plotly_chart(fig, width="stretch")
 with right:
-    st.subheader("📋 ความครอบคลุมเทียบประชากรทะเบียนราษฎร์")
-    fig = px.bar(agg, y="tambon", x="pct_coverage", orientation="h",
-                 text=agg.apply(lambda r: f"{r.residents:,.0f} / {r.pop_total:,.0f} ({r.pct_coverage:.2f}%)", axis=1),
+    st.subheader("📋 ความครอบคลุมเทียบฐานทะเบียนราษฎร์")
+    basis = st.radio("เทียบกับ", ["บ้าน (หลัง)", "ประชากร (คน)"], horizontal=True, key="cov_basis")
+    if basis.startswith("บ้าน"):
+        num, den, pc, unit = "households", "houses_total", "pct_hh_coverage", "ครัวเรือนที่สำรวจ ÷ บ้านทะเบียน"
+    else:
+        num, den, pc, unit = "residents", "pop_total", "pct_coverage", "ผู้อาศัยที่สำรวจ ÷ ประชากรทะเบียน"
+    fig = px.bar(agg, y="tambon", x=pc, orientation="h",
+                 text=agg.apply(lambda r: f"{r[num]:,.0f} / {r[den]:,.0f} ({r[pc]:.2f}%)", axis=1),
                  color_discrete_sequence=[ui.COLORS["people"]],
-                 labels={"tambon": "ตำบล", "pct_coverage": "% ผู้อาศัยที่สำรวจ ÷ ประชากรทะเบียน"},
-                 hover_data={"pop_total": ":,", "residents": True})
+                 labels={"tambon": "ตำบล", pc: f"% {unit}"},
+                 hover_data={den: ":,", num: True})
     fig.update_traces(textposition="outside", cliponaxis=False)
-    fig.update_layout(height=600, margin=dict(t=10, b=10, r=140),
-                      xaxis_range=[0, max(1.0, agg["pct_coverage"].max() * 1.3)])
+    fig.update_layout(height=560, margin=dict(t=10, b=10, r=150),
+                      xaxis_range=[0, max(1.0, agg[pc].max() * 1.35)])
     st.plotly_chart(fig, width="stretch")
 st.caption(f"ประชากรฐาน: {ui.POP_SOURCE} (รวมสัญชาติไทยและไม่ใช่สัญชาติไทย) · เรียงตำบลตามจำนวนประชากร")
 
