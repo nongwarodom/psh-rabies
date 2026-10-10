@@ -42,6 +42,13 @@ html, body, [class*="css"], .stMarkdown, .stText, button, input, select, textare
 .kpi .val{font-size:2rem;font-weight:700;color:#222;line-height:1.1}
 .kpi .sub{font-size:.85rem;color:#777}
 .block-container{padding-top:1.6rem}
+/* sidebar logo: st.logo defaults to ~32px; enlarge to a readable size */
+[data-testid="stSidebarHeader"]{height:auto !important;padding:1rem 1rem .25rem 1rem;align-items:center}
+[data-testid="stSidebarHeader"] img[data-testid="stSidebarLogo"],
+[data-testid="stSidebarHeader"] img[data-testid="stLogo"]{height:auto !important;max-height:110px !important;
+  width:auto !important;max-width:200px !important;object-fit:contain}
+.credit{font-size:.9rem;color:#264653;text-align:center;line-height:1.5;font-weight:600;
+  padding:.4rem .2rem .7rem .2rem}
 </style>
 """
 

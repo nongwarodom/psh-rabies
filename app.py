@@ -4,11 +4,13 @@ Run:  streamlit run app.py
 """
 import streamlit as st
 
-st.set_page_config(page_title="แดชบอร์ดพิษสุนัขบ้า อ.ปราสาท", page_icon="🐕", layout="wide")
+st.set_page_config(page_title="แดชบอร์ดพิษสุนัขบ้า อ.ปราสาท", page_icon="assets/psh_icon.png", layout="wide")
 
 from rabies import ui  # noqa: E402  (after set_page_config)
 
 ui.inject_css()
+# Logo sits at the very top of the sidebar, above the page menu (size enlarged via CSS in ui.py)
+st.logo("assets/psh_logo.png", size="large", icon_image="assets/psh_icon.png")
 
 df, raw, log, excluded, stats, source_note, loaded_at = ui.load_data()
 st.session_state.update(df_all=df, df_raw=raw, df_log=log, df_excluded=excluded,
@@ -18,6 +20,8 @@ st.sidebar.markdown("## 🐕 สำรวจพิษสุนัขบ้า\n*
 st.session_state["df_filtered"] = ui.sidebar_filters(df)
 
 st.sidebar.divider()
+st.sidebar.markdown('<div class="credit">โดย กลุ่มงานเวชกรรมสังคม<br>โรงพยาบาลปราสาท</div>',
+                    unsafe_allow_html=True)
 if st.sidebar.button("🔄 ดึงข้อมูลล่าสุด", width="stretch"):
     ui.load_data.clear()
     st.rerun()
