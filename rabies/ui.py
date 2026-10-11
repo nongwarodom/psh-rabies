@@ -117,13 +117,37 @@ def filtered() -> pd.DataFrame:
     return st.session_state.get("df_filtered", pd.DataFrame())
 
 
+SOURCES = ["Google Form", "อสม."]
+
+
+def combine(google: pd.DataFrame, osm_rows: pd.DataFrame) -> pd.DataFrame:
+    """Stack Google-Form households (1 row = 1 household) with อสม. summary rows (1 row = 1 location)."""
+    g = google.copy()
+    g["source"] = "Google Form"
+    g["location"] = ""
+    g["hh_count"] = 1.0
+    g["hh_bitten"] = g["has_bitten"].astype(float)
+    g["hh_dog"] = g["has_dog"].astype(float)
+    g["hh_cat"] = g["has_cat"].astype(float)
+    g["hh_bite_known"] = 1.0
+    g["hh_animal_known"] = 1.0
+    if osm_rows is None or osm_rows.empty:
+        return g
+    out = pd.concat([g, osm_rows], ignore_index=True, sort=False)
+    out["moo"] = out["moo"].astype("Int64")
+    return out
+
+
 def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     sb = st.sidebar
     sb.markdown("### 🔎 ตัวกรองข้อมูล")
-    responded = [t for t in TAMBONS if t in set(df["tambon"])]
+    srcs = sb.multiselect("แหล่งข้อมูล", SOURCES, default=SOURCES,
+                          help="Google Form = แบบสำรวจรายครัวเรือน · อสม. = ผลสำรวจ อสม. เคาะประตูบ้าน (สรุปรายพื้นที่)")
+    out = df[df["source"].isin(srcs or SOURCES)]
+    responded = [t for t in TAMBONS if t in set(out["tambon"])]
     tambons = sb.multiselect("ตำบล", TAMBONS, placeholder="ทุกตำบล",
                              help=f"มีข้อมูลแล้ว {len(responded)} จาก {len(TAMBONS)} ตำบล")
-    out = df if not tambons else df[df["tambon"].isin(tambons)]
+    out = out if not tambons else out[out["tambon"].isin(tambons)]
     moos = sorted(out["moo"].dropna().unique().tolist())
     sel_moo = sb.multiselect("หมู่ที่", moos, placeholder="ทุกหมู่")
     if sel_moo:
@@ -134,29 +158,34 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
         if isinstance(rng, (list, tuple)) and len(rng) == 2:
             out = out[(out["date"] >= rng[0]) & (out["date"] <= rng[1])]
     st.session_state["sel_tambons"] = tambons
+    st.session_state["sel_sources"] = srcs or SOURCES
     return out
 
 
 # ----------------------------------------------------------------------------- aggregation
 SUM_COLS = ["residents", "people_bitten_unvax", "people_vaccinated", "people_other",
             "dogs_total", "dogs_vaccinated", "dogs_unvaccinated",
-            "cats_total", "cats_vaccinated", "cats_unvaccinated", "other_mammals"]
+            "cats_total", "cats_vaccinated", "cats_unvaccinated", "other_mammals",
+            "hh_count", "hh_bitten", "hh_dog", "hh_cat", "hh_bite_known", "hh_animal_known"]
+
+
+def households(df: pd.DataFrame) -> int:
+    """Number of households represented (Google rows = 1, อสม. rows = their หลังคาเรือน)."""
+    return int(df["hh_count"].sum()) if len(df) else 0
 
 
 def by_area(df: pd.DataFrame, keys=("tambon",), all_tambons=False) -> pd.DataFrame:
     keys = list(keys)
     g = df.groupby(keys, dropna=False)
     agg = g[SUM_COLS].sum()
-    agg["households"] = g.size()
-    agg["hh_bitten"] = g["has_bitten"].sum()
-    agg["hh_dog"] = g["has_dog"].sum()
-    agg["hh_cat"] = g["has_cat"].sum()
+    agg["households"] = agg["hh_count"]
     agg = agg.reset_index()
     if all_tambons and keys == ["tambon"]:
         agg = pd.DataFrame({"tambon": TAMBONS}).merge(agg, on="tambon", how="left").fillna(0)
     agg["pct_bitten_people"] = agg.apply(lambda r: pct(r.people_bitten_unvax, r.residents), axis=1)
     agg["pct_vax_people"] = agg.apply(lambda r: pct(r.people_vaccinated, r.residents), axis=1)
-    agg["pct_hh_bitten"] = agg.apply(lambda r: pct(r.hh_bitten, r.households), axis=1)
+    # household-level bite status is only known for Google-Form households
+    agg["pct_hh_bitten"] = agg.apply(lambda r: pct(r.hh_bitten, r.hh_bite_known), axis=1)
     agg["pct_dog_vax"] = agg.apply(lambda r: pct(r.dogs_vaccinated, r.dogs_total), axis=1)
     agg["pct_cat_vax"] = agg.apply(lambda r: pct(r.cats_vaccinated, r.cats_total), axis=1)
     if keys == ["tambon"]:

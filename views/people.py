@@ -11,15 +11,16 @@ if ui.empty_guard(df):
     st.stop()
 
 T = df[ui.SUM_COLS].sum()
-hh = len(df)
+hh = ui.households(df)
 c = st.columns(4)
-ui.kpi(c[0], "👥 ประชากรทั้งหมด", T.residents, f"{hh:,} ครัวเรือน", ui.COLORS["people"])
-ui.kpi(c[1], "🩸 ถูกกัด/ข่วน ยังไม่ฉีดวัคซีน", T.people_bitten_unvax,
-       f"{ui.fmt_pct(T.people_bitten_unvax, T.residents)} ของประชากร", ui.COLORS["bitten"])
-ui.kpi(c[2], "🏠 ครัวเรือนที่มีผู้ถูกกัด", int(df["has_bitten"].sum()),
-       f"{ui.fmt_pct(df['has_bitten'].sum(), hh)} ของครัวเรือน", ui.COLORS["unvax"])
-ui.kpi(c[3], "💉 เคยฉีดวัคซีนแล้ว", T.people_vaccinated,
-       f"{ui.fmt_pct(T.people_vaccinated, T.residents)} ของประชากร", ui.COLORS["vax"])
+ui.kpi(c[0], "👥 ผู้ที่สำรวจทั้งหมด", T.residents, f"{hh:,} ครัวเรือน (Google Form + อสม.)", ui.COLORS["people"])
+ui.kpi(c[1], "🩸 ถูกกัด/ข่วน ยังไม่ได้รับวัคซีน", T.people_bitten_unvax,
+       f"{ui.fmt_pct(T.people_bitten_unvax, T.residents)} ของผู้ที่สำรวจ", ui.COLORS["bitten"])
+ui.kpi(c[2], "🏠 ครัวเรือนที่มีผู้ถูกกัด*", T.hh_bitten,
+       f"{ui.fmt_pct(T.hh_bitten, T.hh_bite_known)} ของ {T.hh_bite_known:,.0f} ครัวเรือน (*Google Form)", ui.COLORS["unvax"])
+ui.kpi(c[3], "💉 ได้รับวัคซีนแล้ว", T.people_vaccinated,
+       f"{ui.fmt_pct(T.people_vaccinated, T.residents)} ของผู้ที่สำรวจ", ui.COLORS["vax"])
+st.caption("นิยาม (ข้อมูล อสม.): ได้รับวัคซีน = ฉีดครบชุด + อยู่ระหว่างฉีด · ยังไม่ได้รับวัคซีน = ไม่ครบชุด + ไม่ได้รับวัคซีน")
 
 st.divider()
 l, r = st.columns([2, 3])

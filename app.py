@@ -6,18 +6,20 @@ import streamlit as st
 
 st.set_page_config(page_title="แดชบอร์ดพิษสุนัขบ้า อ.ปราสาท", page_icon="assets/psh_icon.png", layout="wide")
 
-from rabies import ui  # noqa: E402  (after set_page_config)
+from rabies import osm, ui  # noqa: E402  (after set_page_config)
 
 ui.inject_css()
 # Logo sits at the very top of the sidebar, above the page menu (size enlarged via CSS in ui.py)
 st.logo("assets/psh_logo.png", size="large", icon_image="assets/psh_icon.png")
 
 df, raw, log, excluded, stats, source_note, loaded_at = ui.load_data()
-st.session_state.update(df_all=df, df_raw=raw, df_log=log, df_excluded=excluded,
+osm_data, _, _ = osm.load()
+combined = ui.combine(df, osm.to_rows(osm_data))
+st.session_state.update(df_all=df, df_combined=combined, df_raw=raw, df_log=log, df_excluded=excluded,
                         stats=stats, source_note=source_note)
 
 st.sidebar.markdown("## 🐕 สำรวจพิษสุนัขบ้า\n**อำเภอปราสาท จ.สุรินทร์**")
-st.session_state["df_filtered"] = ui.sidebar_filters(df)
+st.session_state["df_filtered"] = ui.sidebar_filters(combined)
 
 st.sidebar.divider()
 st.sidebar.markdown('<div class="credit">โดย กลุ่มงานเวชกรรมสังคม<br>โรงพยาบาลปราสาท</div>',

@@ -13,26 +13,30 @@ if ui.empty_guard(df):
     st.stop()
 
 T = df[ui.SUM_COLS].sum()
-hh = len(df)
+hh = ui.households(df)
 base_pop = ui.base_population(st.session_state.get("sel_tambons"))
 base_hh = ui.base_houses(st.session_state.get("sel_tambons"))
+
+by_src = df.groupby("source")[["hh_count", "residents"]].sum()
+st.caption("แหล่งข้อมูลที่รวมอยู่: " + " · ".join(
+    f"**{s}** {r.hh_count:,.0f} ครัวเรือน / {r.residents:,.0f} คน" for s, r in by_src.iterrows()))
 
 c = st.columns(6)
 ui.kpi(c[0], "📋 ฐานทะเบียนราษฎร์", f"{base_hh:,} หลัง", f"ประชากร {base_pop:,} คน (ก.ย. 2569)", "#6c757d")
 ui.kpi(c[1], "🏠 ครัวเรือนที่สำรวจ", hh,
        f"ครอบคลุม {ui.pct(hh, base_hh):.2f}% ของบ้าน · {df.groupby(['tambon','moo']).ngroups} หมู่บ้าน", ui.COLORS["house"])
-ui.kpi(c[2], "👥 ผู้อาศัยที่สำรวจ (คน)", T.residents,
+ui.kpi(c[2], "👥 ผู้ที่สำรวจ (คน)", T.residents,
        f"ครอบคลุม {ui.pct(T.residents, base_pop):.2f}% ของประชากร", ui.COLORS["people"])
-ui.kpi(c[3], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {df['has_dog'].sum():,} ครัวเรือน", ui.COLORS["dog"])
-ui.kpi(c[4], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {df['has_cat'].sum():,} ครัวเรือน", ui.COLORS["cat"])
-ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "", ui.COLORS["mammal"])
+ui.kpi(c[3], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {T.hh_dog:,.0f} ครัวเรือน*", ui.COLORS["dog"])
+ui.kpi(c[4], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {T.hh_cat:,.0f} ครัวเรือน*", ui.COLORS["cat"])
+ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "*ข้อมูลสัตว์จาก Google Form เท่านั้น", ui.COLORS["mammal"])
 
 st.write("")
 c = st.columns(4)
-ui.kpi(c[0], "🩸 ถูกกัด/ข่วน แต่ยังไม่ฉีดวัคซีน", T.people_bitten_unvax,
-       f"{ui.fmt_pct(T.people_bitten_unvax, T.residents)} ของประชากร · {df['has_bitten'].sum()} ครัวเรือน", ui.COLORS["bitten"])
-ui.kpi(c[1], "💉 คนที่เคยฉีดวัคซีนแล้ว", T.people_vaccinated,
-       f"{ui.fmt_pct(T.people_vaccinated, T.residents)} ของประชากร", ui.COLORS["vax"])
+ui.kpi(c[0], "🩸 ถูกกัด/ข่วน ยังไม่ได้รับวัคซีน", T.people_bitten_unvax,
+       f"{ui.fmt_pct(T.people_bitten_unvax, T.residents)} ของผู้ที่สำรวจ", ui.COLORS["bitten"])
+ui.kpi(c[1], "💉 ได้รับวัคซีนแล้ว", T.people_vaccinated,
+       f"{ui.fmt_pct(T.people_vaccinated, T.residents)} ของผู้ที่สำรวจ (อสม.: ครบชุด + อยู่ระหว่างฉีด)", ui.COLORS["vax"])
 ui.kpi(c[2], "🐕 ความครอบคลุมวัคซีนสุนัข", ui.fmt_pct(T.dogs_vaccinated, T.dogs_total),
        f"ฉีดแล้ว {T.dogs_vaccinated:,.0f} / ยังไม่ฉีด {T.dogs_unvaccinated:,.0f} ตัว", ui.COLORS["vax"])
 ui.kpi(c[3], "🐈 ความครอบคลุมวัคซีนแมว", ui.fmt_pct(T.cats_vaccinated, T.cats_total),
@@ -40,30 +44,34 @@ ui.kpi(c[3], "🐈 ความครอบคลุมวัคซีนแม�
 
 st.divider()
 
-# ---- cumulative responses over time
+# ---- cumulative over time (weighted: อสม. rows count as their households / people)
 left, right = st.columns([3, 2])
 with left:
-    st.subheader("📈 จำนวนครัวเรือนที่ตอบแบบสำรวจสะสม")
-    split = st.toggle("แยกตามตำบล", value=False)
+    st.subheader("📈 จำนวนที่สำรวจสะสม")
+    o1, o2 = st.columns(2)
+    unit = o1.radio("หน่วย", ["ครัวเรือน", "คน"], horizontal=True, key="cum_unit")
+    split = o2.radio("แยกตาม", ["ไม่แยก", "แหล่งข้อมูล", "ตำบล"], horizontal=True, key="cum_split")
+    wcol = "hh_count" if unit == "ครัวเรือน" else "residents"
     d = df.sort_values("timestamp").copy()
-    if split:
-        d["สะสม"] = d.groupby("tambon").cumcount() + 1
-        fig = px.line(d, x="timestamp", y="สะสม", color="tambon", markers=True, line_shape="hv",
-                      labels={"timestamp": "วันเวลา", "tambon": "ตำบล", "สะสม": "ครัวเรือนสะสม"})
+    grp = {"แหล่งข้อมูล": "source", "ตำบล": "tambon"}.get(split)
+    if grp:
+        d["สะสม"] = d.groupby(grp)[wcol].cumsum()
+        fig = px.line(d, x="timestamp", y="สะสม", color=grp, markers=True, line_shape="hv",
+                      labels={"timestamp": "วันเวลา", "tambon": "ตำบล", "source": "แหล่งข้อมูล", "สะสม": f"{unit}สะสม"})
     else:
-        d["สะสม"] = range(1, len(d) + 1)
+        d["สะสม"] = d[wcol].cumsum()
         fig = px.area(d, x="timestamp", y="สะสม", markers=True, line_shape="hv",
-                      labels={"timestamp": "วันเวลา", "สะสม": "ครัวเรือนสะสม"})
+                      labels={"timestamp": "วันเวลา", "สะสม": f"{unit}สะสม"})
         fig.update_traces(line_color=ui.COLORS["house"])
-    fig.update_layout(height=380, margin=dict(t=10, b=10))
+    fig.update_layout(height=360, margin=dict(t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
 with right:
-    st.subheader("🗓️ จำนวนที่ตอบรายวัน")
-    daily = df.groupby("date").size().reset_index(name="ครัวเรือน")
-    fig = px.bar(daily, x="date", y="ครัวเรือน", text="ครัวเรือน", labels={"date": "วันที่"},
-                 color_discrete_sequence=[ui.COLORS["people"]])
-    fig.update_layout(height=380, margin=dict(t=10, b=10))
+    st.subheader("🗓️ จำนวนที่สำรวจรายวัน")
+    daily = df.groupby(["date", "source"])[wcol].sum().reset_index(name=unit)
+    fig = px.bar(daily, x="date", y=unit, color="source", text_auto=True, labels={"date": "วันที่", "source": "แหล่งข้อมูล"},
+                 color_discrete_map={"Google Form": ui.COLORS["people"], "อสม.": ui.COLORS["vax"]})
+    fig.update_layout(height=430, margin=dict(t=10, b=10), legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fig, width="stretch")
 
 # ---- responses by tambon (all 18) + coverage vs registered population
@@ -71,13 +79,19 @@ agg = ui.by_area(df, all_tambons=True).sort_values("pop_total", ascending=True)
 agg["สถานะ"] = agg["households"].map(lambda v: "มีข้อมูล" if v > 0 else "ยังไม่มีข้อมูล")
 left, right = st.columns(2)
 with left:
-    st.subheader("🏘️ ครัวเรือนที่ตอบแบบสำรวจ รายตำบล")
-    fig = px.bar(agg, y="tambon", x="households", orientation="h", text="households", color="สถานะ",
-                 color_discrete_map={"มีข้อมูล": ui.COLORS["vax"], "ยังไม่มีข้อมูล": "#ced4da"},
-                 labels={"tambon": "ตำบล", "households": "ครัวเรือน"},
-                 hover_data={"residents": True, "dogs_total": True, "cats_total": True})
+    st.subheader("🏘️ ครัวเรือนที่สำรวจ รายตำบล")
+    src = df.groupby(["tambon", "source"])["hh_count"].sum().reset_index()
+    order = agg["tambon"].tolist()
+    fig = px.bar(src, y="tambon", x="hh_count", orientation="h", color="source", text_auto=True,
+                 category_orders={"tambon": order[::-1]},
+                 color_discrete_map={"Google Form": ui.COLORS["people"], "อสม.": ui.COLORS["vax"]},
+                 labels={"tambon": "ตำบล", "hh_count": "ครัวเรือน", "source": "แหล่งข้อมูล"})
+    fig.update_yaxes(categoryorder="array", categoryarray=order)
     fig.update_layout(height=600, margin=dict(t=10, b=10), legend=dict(title="", orientation="h", y=-0.08))
     st.plotly_chart(fig, width="stretch")
+    no_data = agg.loc[agg["households"] == 0, "tambon"].tolist()
+    if no_data:
+        st.caption(f"ยังไม่มีข้อมูล ({len(no_data)} ตำบล): " + ", ".join(no_data))
 with right:
     st.subheader("📋 ความครอบคลุมเทียบฐานทะเบียนราษฎร์")
     basis = st.radio("เทียบกับ", ["บ้าน (หลัง)", "ประชากร (คน)"], horizontal=True, key="cov_basis")
@@ -109,7 +123,7 @@ def donut(labels, values, colors, title):
     return f
 
 
-c1.plotly_chart(donut(["ถูกกัด ยังไม่ฉีด", "เคยฉีดแล้ว", "อื่นๆ"],
+c1.plotly_chart(donut(["ถูกกัด ยังไม่ได้รับวัคซีน", "ได้รับวัคซีนแล้ว", "อื่นๆ"],
                       [T.people_bitten_unvax, T.people_vaccinated, T.people_other],
                       [ui.COLORS["bitten"], ui.COLORS["vax"], ui.COLORS["other"]], "ประชากร"),
                 width="stretch")

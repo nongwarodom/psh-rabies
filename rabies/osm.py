@@ -74,3 +74,35 @@ def thai_date(ts: pd.Timestamp | None) -> str:
     months = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม",
               "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
     return f"{ts.day} {months[ts.month - 1]} {ts.year + 543}"
+
+
+def to_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Map อสม. summary rows onto the household-survey schema so they can be added to all pages.
+
+    Rules (agreed with กลุ่มงานเวชกรรมสังคม):
+      • ได้รับวัคซีน (people_vaccinated)          = ครบชุด + อยู่ระหว่างฉีด
+      • ถูกกัด ยังไม่ได้รับวัคซีน (people_bitten_unvax) = ไม่ครบชุด + ไม่ได้รับวัคซีน
+      • ผู้อาศัย (residents) = จำนวนที่สำรวจ ; ครัวเรือน (hh_count) = หลังคาเรือน (ตลาด = 0)
+      • ไม่มีข้อมูลสัตว์เลี้ยง และไม่ทราบสถานะการถูกกัดรายครัวเรือน → hh_*_known = 0
+    """
+    if df.empty:
+        return pd.DataFrame()
+    out = pd.DataFrame({
+        "source": "อสม.",
+        "location": df["location"],
+        "tambon": df["tambon"],
+        "moo": df["moo"].astype("Int64"),
+        "timestamp": df["as_of"],
+        "date": df["as_of"].dt.date,
+        "residents": df["persons"].astype(float),
+        "people_vaccinated": (df["vax_full"] + df["vax_in_progress"]).astype(float),
+        "people_bitten_unvax": (df["vax_partial"] + df["vax_none"]).astype(float),
+        "hh_count": df["households"].fillna(0).astype(float),
+    })
+    out["people_other"] = (out.residents - out.people_vaccinated - out.people_bitten_unvax).clip(lower=0)
+    for c in ["dogs_total", "dogs_vaccinated", "dogs_unvaccinated", "cats_total", "cats_vaccinated",
+              "cats_unvaccinated", "other_mammals", "hh_bitten", "hh_dog", "hh_cat",
+              "hh_bite_known", "hh_animal_known"]:
+        out[c] = 0.0
+    out["has_bitten"] = out["has_dog"] = out["has_cat"] = False
+    return out.reset_index(drop=True)
