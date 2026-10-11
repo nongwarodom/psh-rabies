@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 PAGES = ["views/overview.py", "views/map.py", "views/people.py", "views/animals.py",
-         "views/osm.py", "views/area.py", "views/quality.py"]
+         "views/bites.py", "views/osm.py", "views/area.py", "views/quality.py"]
 
 failed = False
 

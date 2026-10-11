@@ -35,6 +35,7 @@ pages = [
     st.Page("views/map.py", title="แผนที่ GIS", icon="🗺️"),
     st.Page("views/people.py", title="ประชากรและการถูกกัด", icon="🧑‍⚕️"),
     st.Page("views/animals.py", title="สัตว์เลี้ยงและวัคซีน", icon="🐶"),
+    st.Page("views/bites.py", title="ผู้ถูกสัตว์กัด (ข้อมูล รพ. 5 ปี)", icon="🏥"),
     st.Page("views/osm.py", title="ผลสำรวจ อสม.", icon="🚪"),
     st.Page("views/area.py", title="รายตำบล/หมู่บ้าน", icon="🏘️"),
     st.Page("views/quality.py", title="คุณภาพข้อมูล", icon="🧹"),
