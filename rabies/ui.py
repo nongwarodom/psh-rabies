@@ -117,11 +117,66 @@ def filtered() -> pd.DataFrame:
     return st.session_state.get("df_filtered", pd.DataFrame())
 
 
-SOURCES = ["Google Form", "อสม."]
+APP_SOURCE = "แอปสำรวจ"
+SOURCES = ["Google Form", "อสม.", APP_SOURCE]
+SOURCE_COLORS = {"Google Form": COLORS["people"], "อสม.": COLORS["vax"], APP_SOURCE: "#e76f51"}
 
 
-def combine(google: pd.DataFrame, osm_rows: pd.DataFrame) -> pd.DataFrame:
-    """Stack Google-Form households (1 row = 1 household) with อสม. summary rows (1 row = 1 location)."""
+@st.cache_data(ttl=300, show_spinner="กำลังดึงข้อมูลจากแบบบันทึกในแอป...")
+def load_app_entries():
+    """(households, persons, error) from the in-app form store — non-personal columns only."""
+    from rabies import survey_store
+    try:
+        hh, persons = survey_store.load()
+        return hh, persons, None
+    except Exception as e:  # noqa: BLE001  (dashboard must still work if the store is unreachable)
+        return pd.DataFrame(), pd.DataFrame(), f"{type(e).__name__}: {e}"
+
+
+def app_rows(hh: pd.DataFrame, persons: pd.DataFrame) -> pd.DataFrame:
+    """Map in-app form households onto the household-survey schema (1 row = 1 household).
+
+    • ถูกกัด ยังไม่ได้รับวัคซีน = persons with vaccine_status 'ยังไม่ได้รับ'
+    • เคยฉีดวัคซีนแล้ว        = household answer (form asks to include vaccinated bitten persons)
+    • same ตำบล+หมู่+บ้านเลขที่ submitted again → keep the latest (same rule as the Google Form)
+    """
+    if hh is None or hh.empty:
+        return pd.DataFrame()
+    g = hh.copy()
+    num = ["residents", "people_vaccinated", "dogs_total", "dogs_vaccinated", "cats_total",
+           "cats_vaccinated", "other_mammals"]
+    for c in num:
+        g[c] = pd.to_numeric(g[c], errors="coerce").fillna(0).astype(float)
+    g["moo"] = pd.to_numeric(g["moo"], errors="coerce").astype("Int64")
+    g["timestamp"] = pd.to_datetime(g["submitted_at"], errors="coerce")
+    g = g[g["tambon"].isin(TAMBONS) & g["timestamp"].notna()]
+    g["house_key"] = g["tambon"] + "|" + g["moo"].astype(str) + "|" + g["house_no"].astype(str)
+    g = g.sort_values("timestamp").drop_duplicates("house_key", keep="last")
+    unvax = (persons[persons["vaccine_status"] == "ยังไม่ได้รับ"].groupby("household_id").size()
+             if persons is not None and not persons.empty else pd.Series(dtype=float))
+    g["people_bitten_unvax"] = g["household_id"].map(unvax).fillna(0).astype(float)
+    known = g.people_bitten_unvax + g.people_vaccinated  # residents can't be fewer than people counted
+    g["residents"] = g["residents"].where(g["residents"] >= known, known)
+    g["people_other"] = (g.residents - g.people_bitten_unvax - g.people_vaccinated).clip(lower=0)
+    g["dogs_unvaccinated"] = (g.dogs_total - g.dogs_vaccinated).clip(lower=0)
+    g["cats_unvaccinated"] = (g.cats_total - g.cats_vaccinated).clip(lower=0)
+    g["has_bitten"] = g.people_bitten_unvax > 0
+    g["has_dog"] = g.dogs_total > 0
+    g["has_cat"] = g.cats_total > 0
+    g["date"] = g["timestamp"].dt.date
+    g["source"] = APP_SOURCE
+    g["location"] = ""
+    g["hh_count"] = 1.0
+    g["hh_bitten"] = g["has_bitten"].astype(float)
+    g["hh_dog"] = g["has_dog"].astype(float)
+    g["hh_cat"] = g["has_cat"].astype(float)
+    g["hh_bite_known"] = g["hh_animal_known"] = 1.0
+    return g.drop(columns=["submitted_at", "consent", "people_bitten"], errors="ignore").reset_index(drop=True)
+
+
+def combine(google: pd.DataFrame, osm_rows: pd.DataFrame, app: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Stack Google-Form households (1 row = 1 household) with อสม. summary rows (1 row = 1 location)
+    and in-app form households (1 row = 1 household)."""
     g = google.copy()
     g["source"] = "Google Form"
     g["location"] = ""
@@ -131,9 +186,10 @@ def combine(google: pd.DataFrame, osm_rows: pd.DataFrame) -> pd.DataFrame:
     g["hh_cat"] = g["has_cat"].astype(float)
     g["hh_bite_known"] = 1.0
     g["hh_animal_known"] = 1.0
-    if osm_rows is None or osm_rows.empty:
+    parts = [p for p in (g, osm_rows, app) if p is not None and not p.empty]
+    if len(parts) == 1:
         return g
-    out = pd.concat([g, osm_rows], ignore_index=True, sort=False)
+    out = pd.concat(parts, ignore_index=True, sort=False)
     out["moo"] = out["moo"].astype("Int64")
     return out
 
@@ -142,7 +198,8 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     sb = st.sidebar
     sb.markdown("### 🔎 ตัวกรองข้อมูล")
     srcs = sb.multiselect("แหล่งข้อมูล", SOURCES, default=SOURCES,
-                          help="Google Form = แบบสำรวจรายครัวเรือน · อสม. = ผลสำรวจ อสม. เคาะประตูบ้าน (สรุปรายพื้นที่)")
+                          help="Google Form = แบบสำรวจรายครัวเรือน · อสม. = ผลสำรวจ อสม. เคาะประตูบ้าน (สรุปรายพื้นที่) · "
+                               "แอปสำรวจ = หน้า 📝 บันทึกสำรวจครัวเรือน")
     out = df[df["source"].isin(srcs or SOURCES)]
     responded = [t for t in TAMBONS if t in set(out["tambon"])]
     tambons = sb.multiselect("ตำบล", TAMBONS, placeholder="ทุกตำบล",

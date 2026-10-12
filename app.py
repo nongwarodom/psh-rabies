@@ -14,9 +14,10 @@ st.logo("assets/psh_logo.png", size="large", icon_image="assets/psh_icon.png")
 
 df, raw, log, excluded, stats, source_note, loaded_at = ui.load_data()
 osm_data, _, _ = osm.load()
-combined = ui.combine(df, osm.to_rows(osm_data))
+app_hh, app_persons, app_error = ui.load_app_entries()
+combined = ui.combine(df, osm.to_rows(osm_data), ui.app_rows(app_hh, app_persons))
 st.session_state.update(df_all=df, df_combined=combined, df_raw=raw, df_log=log, df_excluded=excluded,
-                        stats=stats, source_note=source_note)
+                        stats=stats, source_note=source_note, app_persons=app_persons, app_error=app_error)
 
 st.sidebar.markdown("## 🐕 สำรวจพิษสุนัขบ้า\n**อำเภอปราสาท จ.สุรินทร์**")
 st.session_state["df_filtered"] = ui.sidebar_filters(combined)
@@ -26,9 +27,12 @@ st.sidebar.markdown('<div class="credit">โดย กลุ่มงานเ�
                     unsafe_allow_html=True)
 if st.sidebar.button("🔄 ดึงข้อมูลล่าสุด", width="stretch"):
     ui.load_data.clear()
+    ui.load_app_entries.clear()
     st.rerun()
 st.sidebar.caption(f"แหล่งข้อมูล: {source_note}\n\nอัปเดต: {loaded_at:%d/%m/%Y %H:%M:%S} "
                    f"(รีเฟรชอัตโนมัติทุก 5 นาที)")
+if app_error:
+    st.sidebar.caption(f"⚠️ อ่านข้อมูลแอปสำรวจไม่ได้: {app_error[:160]}")
 
 pages = [
     st.Page("views/overview.py", title="ภาพรวม", icon="📊", default=True),

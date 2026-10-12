@@ -37,6 +37,10 @@ PERSON_COLS = [
     "bite_date", "days_since_bite", "period", "vaccine_status",
 ]
 TABLES = {"households": HOUSEHOLD_COLS, "persons": PERSON_COLS}
+# What the DASHBOARD may read back — no names, CID, phone numbers or surveyor (the Apps Script
+# also blocks those server-side, so they never leave Google).
+PERSONAL = {"first_name", "last_name", "cid", "phone", "owner_phone", "surveyor"}
+READ_COLS = {t: [c for c in cols if c not in PERSONAL] for t, cols in TABLES.items()}
 
 # ----------------------------------------------------------------------------- choices
 SEX = ["ชาย", "หญิง"]
@@ -163,6 +167,18 @@ class _SheetStore:
         if persons:
             self._append("persons", [[_str(p.get(c)) for c in PERSON_COLS] for p in persons])
 
+    def read(self) -> dict[str, list[list[str]]]:
+        out = {}
+        for t, cols in READ_COLS.items():
+            r = self.s.get(f"{self.API}/{self.id}/values/{t}", timeout=30)
+            vals = r.json().get("values", []) if r.status_code == 200 else []
+            if len(vals) < 2:
+                out[t] = []
+                continue
+            idx = [vals[0].index(c) if c in vals[0] else None for c in cols]
+            out[t] = [[(row[i] if i is not None and i < len(row) else "") for i in idx] for row in vals[1:]]
+        return out
+
 
 class _SqliteStore:
     def __init__(self, path=SQLITE_PATH):
@@ -179,13 +195,14 @@ class _SqliteStore:
             con.executemany(f"INSERT INTO persons VALUES ({','.join('?' * len(PERSON_COLS))})",
                             [[_str(p.get(c)) for c in PERSON_COLS] for p in persons])
 
-    def count(self) -> int:
+    def read(self) -> dict[str, list[list[str]]]:
         with sqlite3.connect(self.path) as con:
-            return con.execute("SELECT COUNT(*) FROM households").fetchone()[0]
+            return {t: [list(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM {t}")]
+                    for t, cols in READ_COLS.items()}
 
 
 class _AppsScriptStore:
-    """POST {token, tables} to the Apps Script web app bound to the private sheet.
+    """POST JSON to the Apps Script web app bound to the private sheet.
 
     Apps Script answers a POST with a 302 to script.googleusercontent.com; urllib follows it with a
     GET (body dropped), which is exactly what Google expects, and the JSON result comes back.
@@ -194,16 +211,11 @@ class _AppsScriptStore:
     def __init__(self, url: str, token: str):
         self.url, self.token = url, token
 
-    def save(self, household: dict, persons: list[dict]):
+    def _post(self, payload: dict) -> dict:
         import json
         import urllib.request
 
-        payload = {"token": self.token, "tables": {
-            "households": {"columns": HOUSEHOLD_COLS,
-                           "rows": [[_str(household.get(c)) for c in HOUSEHOLD_COLS]]},
-            "persons": {"columns": PERSON_COLS,
-                        "rows": [[_str(p.get(c)) for c in PERSON_COLS] for p in persons]},
-        }}
+        payload = {"token": self.token, **payload}
         req = urllib.request.Request(self.url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                                      headers={"Content-Type": "application/json"}, method="POST")
         try:
@@ -220,6 +232,28 @@ class _AppsScriptStore:
             err = res.get("error")
             raise PermissionError("TOKEN ไม่ตรงกับ Script Properties" if err == "unauthorized"
                                   else f"Apps Script error: {err}")
+        return res
+
+    def save(self, household: dict, persons: list[dict]):
+        self._post({"tables": {
+            "households": {"columns": HOUSEHOLD_COLS,
+                           "rows": [[_str(household.get(c)) for c in HOUSEHOLD_COLS]]},
+            "persons": {"columns": PERSON_COLS,
+                        "rows": [[_str(p.get(c)) for c in PERSON_COLS] for p in persons]},
+        }})
+
+    def read(self) -> dict[str, list[list[str]]]:
+        res = self._post({"action": "read", "columns": READ_COLS})
+        tables = res.get("tables")
+        if tables is None:
+            raise ConnectionError("Apps Script ยังเป็นเวอร์ชันเก่า (อ่านข้อมูลไม่ได้) — วางโค้ดใหม่แล้ว "
+                                  "Deploy → Manage deployments → Edit → New version")
+        out = {}
+        for t, cols in READ_COLS.items():
+            tb = tables.get(t) or {"columns": cols, "rows": []}
+            pos = {c: i for i, c in enumerate(tb["columns"])}
+            out[t] = [[(r[pos[c]] if c in pos else "") for c in cols] for r in tb["rows"]]
+        return out
 
 
 def get_store():
@@ -236,3 +270,11 @@ def save(household: dict, persons: list[dict]) -> str:
     """Persist one household + its bitten persons. Returns the backend used."""
     get_store().save(household, persons)
     return backend_name()
+
+
+def load():
+    """Return (households, persons) DataFrames for the dashboard — NON-PERSONAL columns only."""
+    import pandas as pd
+
+    data = get_store().read()
+    return tuple(pd.DataFrame(data.get(t, []), columns=cols) for t, cols in READ_COLS.items())

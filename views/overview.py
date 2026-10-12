@@ -29,7 +29,7 @@ ui.kpi(c[2], "👥 ผู้ที่สำรวจ (คน)", T.residents,
        f"ครอบคลุม {ui.pct(T.residents, base_pop):.2f}% ของประชากร", ui.COLORS["people"])
 ui.kpi(c[3], "🐕 สุนัข (ตัว)", T.dogs_total, f"เลี้ยงใน {T.hh_dog:,.0f} ครัวเรือน*", ui.COLORS["dog"])
 ui.kpi(c[4], "🐈 แมว (ตัว)", T.cats_total, f"เลี้ยงใน {T.hh_cat:,.0f} ครัวเรือน*", ui.COLORS["cat"])
-ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "*ข้อมูลสัตว์จาก Google Form เท่านั้น", ui.COLORS["mammal"])
+ui.kpi(c[5], "🐾 สัตว์ลูกด้วยนมอื่น (ตัว)", T.other_mammals, "*ไม่รวม อสม. (ไม่มีข้อมูลสัตว์)", ui.COLORS["mammal"])
 
 st.write("")
 c = st.columns(4)
@@ -70,7 +70,7 @@ with right:
     st.subheader("🗓️ จำนวนที่สำรวจรายวัน")
     daily = df.groupby(["date", "source"])[wcol].sum().reset_index(name=unit)
     fig = px.bar(daily, x="date", y=unit, color="source", text_auto=True, labels={"date": "วันที่", "source": "แหล่งข้อมูล"},
-                 color_discrete_map={"Google Form": ui.COLORS["people"], "อสม.": ui.COLORS["vax"]})
+                 color_discrete_map=ui.SOURCE_COLORS)
     fig.update_layout(height=430, margin=dict(t=10, b=10), legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fig, width="stretch")
 
@@ -84,7 +84,7 @@ with left:
     order = agg["tambon"].tolist()
     fig = px.bar(src, y="tambon", x="hh_count", orientation="h", color="source", text_auto=True,
                  category_orders={"tambon": order[::-1]},
-                 color_discrete_map={"Google Form": ui.COLORS["people"], "อสม.": ui.COLORS["vax"]},
+                 color_discrete_map=ui.SOURCE_COLORS,
                  labels={"tambon": "ตำบล", "hh_count": "ครัวเรือน", "source": "แหล่งข้อมูล"})
     fig.update_yaxes(categoryorder="array", categoryarray=order)
     fig.update_layout(height=600, margin=dict(t=10, b=10), legend=dict(title="", orientation="h", y=-0.08))

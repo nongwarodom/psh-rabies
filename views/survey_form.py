@@ -8,35 +8,46 @@ import pandas as pd
 import streamlit as st
 
 from rabies import survey_store as store
+from rabies import ui
 from rabies.cleaning import TAMBONS
 
 st.title("📝 แบบบันทึกสำรวจครัวเรือน")
 st.caption("แบบสำรวจข้อมูลประชากรและสัตว์เลี้ยงในครัวเรือนเพื่อเฝ้าระวังโรคพิษสุนัขบ้า อำเภอปราสาท จังหวัดสุรินทร์ "
            "· พร้อมข้อมูลรายบุคคลของผู้ที่ถูกสัตว์เลี้ยงลูกด้วยนม กัด/ข่วน/ทำร้าย ในระยะ 1 ปี")
 
-# ----------------------------------------------------------------------------- access control
-try:
-    PASSWORD = st.secrets.get("survey_form", {}).get("password", "")
-except Exception:  # noqa: BLE001  (no secrets.toml)
-    PASSWORD = ""
-if PASSWORD and not st.session_state.get("survey_auth"):
-    with st.form("survey_login"):
-        st.markdown("🔒 หน้านี้บันทึก **ข้อมูลส่วนบุคคล** — กรุณาใส่รหัสผ่านสำหรับเจ้าหน้าที่/อสม.")
-        pw = st.text_input("รหัสผ่าน", type="password")
-        if st.form_submit_button("เข้าสู่ระบบ", type="primary"):
-            if pw == PASSWORD:
-                st.session_state["survey_auth"] = True
-                st.rerun()
-            st.error("รหัสผ่านไม่ถูกต้อง")
-    st.stop()
+# Larger, touch-friendly controls for อสม. using phones (≥16px input text also stops iOS auto-zoom)
+st.markdown("""
+<style>
+[data-testid="stWidgetLabel"] p {font-size:1.12rem !important; font-weight:600; line-height:1.4}
+input, textarea, [data-baseweb="select"] div {font-size:1.15rem !important}
+[data-baseweb="input"] input, [data-testid="stNumberInputContainer"] input {min-height:2.9rem}
+[data-baseweb="select"] > div {min-height:2.9rem}
+[data-testid="stNumberInputContainer"] button {min-width:2.6rem}
+[data-testid="stRadio"] label p, [data-testid="stCheckbox"] label p,
+[data-testid="stToggle"] label p {font-size:1.1rem !important}
+[data-testid="stRadio"] label {padding:.3rem .6rem .3rem 0}
+[data-testid="stRadio"] label > div:first-child, [data-testid="stCheckbox"] label span {transform:scale(1.2)}
+.stButton button {font-size:1.25rem !important; min-height:3.2rem; font-weight:700}
+.stButton button p {font-size:1.25rem !important}
+[data-testid="stCaptionContainer"] p {font-size:1rem !important}
+h3 {font-size:1.45rem !important}
+@media (max-width: 640px) {
+  .block-container {padding-left:.8rem !important; padding-right:.8rem !important}
+  [data-testid="stWidgetLabel"] p {font-size:1.22rem !important}
+  input, textarea, [data-baseweb="select"] div {font-size:1.25rem !important}
+  [data-testid="stRadio"] label p, [data-testid="stCheckbox"] label p {font-size:1.2rem !important}
+  h1 {font-size:1.7rem !important}
+  h3 {font-size:1.35rem !important}
+}
+</style>
+""", unsafe_allow_html=True)
 
+# No password: this page only WRITES data and never displays what is stored (only a masked
+# summary of this browser session's own entries).
 backend = store.backend_name()
 if backend == "sqlite":
     st.warning("⚠️ ยังไม่ได้เชื่อมต่อ Google Sheet (`[survey_apps_script]` url + token ใน secrets) — "
                "ข้อมูลจะบันทึกลงไฟล์ในเครื่อง `data/survey_entries.sqlite` ซึ่ง **จะหายเมื่อแอปบน Streamlit Cloud รีสตาร์ท**")
-if not PASSWORD:
-    st.info("ℹ️ ยังไม่ได้ตั้งรหัสผ่านหน้าแบบบันทึก (`[survey_form] password` ใน secrets) — ใครก็ส่งข้อมูลได้ "
-            "(แต่หน้านี้ไม่แสดงข้อมูลส่วนบุคคลที่บันทึกไว้)")
 
 # ----------------------------------------------------------------------------- helpers
 nonce = st.session_state.setdefault("survey_nonce", 0)  # bump → every widget resets after a save
@@ -63,7 +74,8 @@ house_no = c[3].text_input("บ้านเลขที่ *", key=k("house_no")
 c = st.columns(3)
 owner_phone = c[0].text_input("เบอร์โทรเจ้าของบ้าน", key=k("owner_phone"), max_chars=12, placeholder="0812345678")
 residents = c[1].number_input("จำนวนผู้อาศัยในบ้าน (คน) *", key=k("residents"), **{**count, "min_value": 1, "value": 1})
-people_vaccinated = c[2].number_input("จำนวนผู้ที่เคยฉีดวัคซีนพิษสุนัขบ้าแล้ว (คน)", key=k("pvax"), **count)
+people_vaccinated = c[2].number_input("จำนวนผู้ที่เคยฉีดวัคซีนพิษสุนัขบ้าแล้ว (คน)", key=k("pvax"), **count,
+                                      help="รวมผู้ถูกกัดในข้อ 3 ที่ได้รับวัคซีนครบ/อยู่ระหว่างการฉีดด้วย")
 
 # ----------------------------------------------------------------------------- 2. animals
 st.subheader("🐶 2. สัตว์เลี้ยงในบ้าน")
@@ -150,6 +162,12 @@ def validate() -> list[str]:
         e.append("จำนวนผู้ที่เคยฉีดวัคซีน มากกว่าจำนวนผู้อาศัยในบ้าน")
     if n_bitten > residents:
         e.append("จำนวนผู้ถูกกัด มากกว่าจำนวนผู้อาศัยในบ้าน")
+    vaxed_bitten = sum(q["vaccine_status"] in ("ได้รับครบ", "อยู่ระหว่างการฉีด") for q in persons_raw)
+    unvax_bitten = sum(q["vaccine_status"] == "ยังไม่ได้รับ" for q in persons_raw)
+    if people_vaccinated < vaxed_bitten:
+        e.append(f"จำนวนผู้ที่เคยฉีดวัคซีน ({people_vaccinated}) ต้องรวมผู้ถูกกัดที่ได้รับวัคซีนแล้ว ({vaxed_bitten} คน) ด้วย")
+    if people_vaccinated + unvax_bitten > residents:
+        e.append("ผู้เคยฉีดวัคซีน + ผู้ถูกกัดที่ยังไม่ได้รับวัคซีน มากกว่าจำนวนผู้อาศัยในบ้าน")
     seen = set()
     for q in persons_raw:
         who = f"คนที่ {q['person_no']}"
@@ -205,6 +223,7 @@ if st.button("💾 บันทึกข้อมูล", type="primary", width=
             st.session_state["survey_saved_msg"] = (f"✅ บันทึกบ้านเลขที่ {house_no.strip()} หมู่ {moo} ต.{tambon} "
                                                     f"และผู้ถูกกัด {int(n_bitten)} คน ลง{where} เรียบร้อย")
             st.session_state["survey_nonce"] = nonce + 1
+            ui.load_app_entries.clear()  # dashboards show the new household immediately
             st.rerun()
 
 if hist := st.session_state.get("survey_history"):

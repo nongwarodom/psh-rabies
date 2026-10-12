@@ -7,8 +7,8 @@ from rabies import ui
 df = ui.filtered()
 st.title("🐶 สัตว์เลี้ยงและสถานะวัคซีนพิษสุนัขบ้า")
 st.caption("จำนวนสุนัข แมว และสัตว์เลี้ยงลูกด้วยนมอื่นๆ พร้อมรายละเอียดการได้รับ / ไม่ได้รับวัคซีน "
-           "— ข้อมูลจาก Google Form เท่านั้น (ผลสำรวจ อสม. ไม่มีข้อมูลสัตว์เลี้ยง)")
-df = df[df["source"] == "Google Form"] if "source" in df else df
+           "— ข้อมูลจาก Google Form + แอปสำรวจ (ผลสำรวจ อสม. ไม่มีข้อมูลสัตว์เลี้ยง)")
+df = df[df["hh_animal_known"] == 1] if "hh_animal_known" in df else df
 if ui.empty_guard(df):
     st.stop()
 
