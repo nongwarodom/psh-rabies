@@ -39,5 +39,6 @@ pages = [
     st.Page("views/osm.py", title="ผลสำรวจ อสม.", icon="🚪"),
     st.Page("views/area.py", title="รายตำบล/หมู่บ้าน", icon="🏘️"),
     st.Page("views/quality.py", title="คุณภาพข้อมูล", icon="🧹"),
+    st.Page("views/survey_form.py", title="บันทึกสำรวจครัวเรือน", icon="📝"),
 ]
 st.navigation(pages).run()
